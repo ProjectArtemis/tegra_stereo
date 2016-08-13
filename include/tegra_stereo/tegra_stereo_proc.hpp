@@ -1,12 +1,6 @@
-#ifndef TEGRA_STEREO_TEGRA_STEREO_PROC_HPP_
-#define TEGRA_STEREO_TEGRA_STEREO_PROC_HPP_
+#pragma once
 
-#include <boost/version.hpp>
-#if ((BOOST_VERSION / 100) % 1000) >= 53
-#include <boost/scoped_ptr.hpp>
-#include <boost/thread.hpp>
-#include <boost/thread/lock_guard.hpp>
-#endif
+#include <memory>
 
 #include <ros/ros.h>
 #include <ros/package.h>
@@ -27,43 +21,46 @@
 #include <opencv2/cudaimgproc.hpp>
 #include <opencv2/cudastereo.hpp>
 #include <opencv2/cudawarping.hpp>
-#define GPU cv::cuda
 #else
 #include <opencv2/gpu/gpu.hpp>
-#define GPU cv::gpu
 #endif
 
 #include <sensor_msgs/image_encodings.h>
 #include <stereo_msgs/DisparityImage.h>
 
-using namespace sensor_msgs;
-using namespace stereo_msgs;
-using namespace message_filters::sync_policies;
-
 namespace tegra_stereo {
 
-class TegraStereoProc : public nodelet::Nodelet {
-  typedef image_transport::SubscriberFilter Subscriber;
-    typedef message_filters::Subscriber<sensor_msgs::CameraInfo> InfoSubscriber;
-    typedef message_filters::sync_policies::ExactTime<sensor_msgs::Image, sensor_msgs::Image, sensor_msgs::CameraInfo, sensor_msgs::CameraInfo> ExactPolicy;
-    typedef message_filters::Synchronizer<ExactPolicy> ExactSync;
+using stereo_msgs::DisparityImage;
+using message_filters::sync_policies::ExactTime;
 
- public:
+#if OPENCV3
+namespace GPU = cv::cuda;
+#else
+namespace GPU = cv::gpu;
+#endif
+
+class TegraStereoProc : public nodelet::Nodelet {
+  using SubscriberFilter = image_transport::SubscriberFilter;
+  using InfoSubscriber = message_filters::Subscriber<sensor_msgs::CameraInfo>;
+  using ExactPolicy = ExactTime<sensor_msgs::Image, sensor_msgs::Image, sensor_msgs::CameraInfo, sensor_msgs::CameraInfo>;
+  using ExactSync = message_filters::Synchronizer<ExactPolicy>;
+
+public:
   TegraStereoProc();
   ~TegraStereoProc();
 
   virtual void onInit();
   void imageCallback(const sensor_msgs::ImageConstPtr& l_image_msg,
-                 const sensor_msgs::ImageConstPtr& r_image_msg,
-                 const sensor_msgs::CameraInfoConstPtr& l_info_msg,
-                 const sensor_msgs::CameraInfoConstPtr& r_info_msg);
- private:
+      const sensor_msgs::ImageConstPtr& r_image_msg,
+      const sensor_msgs::CameraInfoConstPtr& l_info_msg,
+      const sensor_msgs::CameraInfoConstPtr& r_info_msg);
 
+private:
   bool calibration_initialized;
 
-  boost::shared_ptr<image_transport::ImageTransport> it_;
-  
-  Subscriber m_left_sub, m_right_sub;
+  boost::shared_ptr<image_transport::ImageTransport> m_it;
+
+  SubscriberFilter m_left_sub, m_right_sub;
   InfoSubscriber m_left_info_sub, m_right_info_sub;
 
   boost::shared_ptr<ExactSync> m_exact_sync;
@@ -113,9 +110,9 @@ class TegraStereoProc : public nodelet::Nodelet {
   mutable cv::gpu::StereoBM_GPU block_matcher_;
   mutable cv::Mat disparity_;
 #endif
-  
+
   int queue_size_;
-  
+
   int win_size_;
   int ndisp_;
   int filter_radius_;
@@ -128,20 +125,18 @@ class TegraStereoProc : public nodelet::Nodelet {
   bool use_stretch_;
 
   void initRectificationMap(const sensor_msgs::CameraInfoConstPtr &msg,
-                          cv::Mat& map1, cv::Mat& map2);
+      cv::Mat& map1, cv::Mat& map2);
 
   void rectifyMono(GPU::GpuMat& gpu_raw,
-                  GPU::GpuMat& gpu_rect,
-                  GPU::GpuMat& gpu_map1,
-                  GPU::GpuMat& gpu_map2,
-                  GPU::Stream& stream = GPU::Stream::Null());
-                  
-  void processStereo(GPU::GpuMat& gpu_left_raw,
-  		  GPU::GpuMat& gpu_right_raw,
-                 const std_msgs::Header& header);
+      GPU::GpuMat& gpu_rect,
+      GPU::GpuMat& gpu_map1,
+      GPU::GpuMat& gpu_map2,
+      GPU::Stream& stream = GPU::Stream::Null());
 
+  void processStereo(GPU::GpuMat& gpu_left_raw,
+      GPU::GpuMat& gpu_right_raw,
+      const std_msgs::Header& header);
 };
 
 }  // namespace
 
-#endif  // TEGRA_STEREO_TEGRA_STEREO_PROC_HPP_
