@@ -286,14 +286,16 @@ void TegraStereoProc::processStereo(GPU::GpuMat &gpu_left_raw,
 
 void TegraStereoProc::initRectificationMap(const sensor_msgs::CameraInfoConstPtr &msg,
     cv::Mat &map1, cv::Mat &map2) {
-  cv::Mat_<double> cv_D(1, msg->D.size());
-  for (size_t i = 0; i < msg->D.size(); i++) {
-    cv_D(i) = msg->D[i];
-  }
+  //cv::Mat_<double> cv_D(1, msg->D.size());
+  //for (size_t i = 0; i < msg->D.size(); i++) {
+  //  cv_D(i) = msg->D[i];
+  //}
+  // http://docs.opencv.org/2.4/modules/core/doc/basic_structures.html#mat
+  cv::Mat cv_D(msg->D, true);
 
-  cv::Matx33d cv_K(&msg->K[0]);
-  cv::Matx33d cv_R(&msg->R[0]);
-  cv::Matx34d cv_P(&msg->P[0]);
+  cv::Matx33d cv_K(msg->K.data());
+  cv::Matx33d cv_R(msg->R.data());
+  cv::Matx34d cv_P(msg->P.data());
 
   cv::initUndistortRectifyMap(cv_K, cv_D, cv_R, cv_P,
       cv::Size(msg->width, msg->height), CV_32FC1, map1,
