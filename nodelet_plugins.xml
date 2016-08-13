@@ -1,0 +1,7 @@
+<library path="lib/libtegra_stereo_proc">
+
+  <class name="tegra_stereo/tegra_stereo_proc" type="tegra_stereo::TegraStereoProc" base_class_type="nodelet::Nodelet">
+    <description>CUDA accelerated stereo vision pipeline</description>
+  </class>
+
+</library>

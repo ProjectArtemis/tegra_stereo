@@ -1,0 +1,2 @@
+
+# tegra_stereo
