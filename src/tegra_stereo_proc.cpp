@@ -7,7 +7,7 @@ TegraStereoProc::~TegraStereoProc() {}
 
 void TegraStereoProc::onInit() {
 
-  ROS_WARN("Init nodelet");
+  NODELET_WARN("Init nodelet");
   ros::NodeHandle &nh = getNodeHandle();
   ros::NodeHandle &private_nh = getPrivateNodeHandle();
 
@@ -80,9 +80,9 @@ void TegraStereoProc::imageCallback(
     const sensor_msgs::CameraInfoConstPtr &l_info_msg,
     const sensor_msgs::CameraInfoConstPtr &r_info_msg) {
 
-  ROS_INFO("image callback");
+  NODELET_INFO("image callback");
   if (!calibration_initialized) {
-    ROS_INFO("calib init");
+    NODELET_INFO("calib init");
 
     initRectificationMap(l_info_msg, left_map1_, left_map2_);
     gpu_left_map1_.upload(left_map1_);
@@ -100,7 +100,7 @@ void TegraStereoProc::imageCallback(
     r_height_ = r_info_msg->height;
 
     calibration_initialized = true;
-    ROS_INFO("stereo calibration initialized");
+    NODELET_INFO("stereo calibration initialized");
   }
 
   // TODO perf this
@@ -109,44 +109,44 @@ void TegraStereoProc::imageCallback(
 
   processStereo(gpu_raw_left_, gpu_raw_right_, l_info_msg->header);
 
-  ROS_INFO("end callback");
+  NODELET_INFO("end callback");
 }
 
 void TegraStereoProc::processStereo(GPU::GpuMat &gpu_left_raw,
     GPU::GpuMat &gpu_right_raw,
     const std_msgs::Header &header) {
-  ROS_INFO("start proc");
+  NODELET_INFO("start proc");
   GPU::Stream gpu_stream;
 
   // TODO potentially use this to block out unmatchable portions
   //  // crop left and right images
-  //  ROS_INFO("  crop left");
+  //  NODELET_INFO("  crop left");
   //  GPU::GpuMat gpu_left_raw(
   //      gpu_input,
   //      cv::Rect(l_x_offset_, l_y_offset_, l_width_, l_height_));
 
-  //  ROS_INFO("  crop right");
+  //  NODELET_INFO("  crop right");
   //  GPU::GpuMat gpu_right_raw(
   //      gpu_input,
   //      cv::Rect(r_x_offset_, r_y_offset_, r_width_, r_height_));
 
   // rectify
-  ROS_INFO("  rectify left");
+  NODELET_INFO("  rectify left");
   rectifyMono(gpu_left_raw, gpu_left_rect_, gpu_left_map1_, gpu_left_map2_,
       gpu_stream);
 
-  ROS_INFO("  rectify right");
+  NODELET_INFO("  rectify right");
   rectifyMono(gpu_right_raw, gpu_right_rect_, gpu_right_map1_, gpu_right_map2_,
       gpu_stream);
 
   // stretch
   if (use_stretch_) {
-    ROS_INFO("  stretch left");
+    NODELET_INFO("  stretch left");
     GPU::resize(gpu_left_rect_, gpu_left_stretch_,
         cv::Size(stretch_factor_ * l_width_, l_height_), 0, 0,
         cv::INTER_LINEAR, gpu_stream);
 
-    ROS_INFO("  stretch right");
+    NODELET_INFO("  stretch right");
     GPU::resize(gpu_right_rect_, gpu_right_stretch_,
         cv::Size(stretch_factor_ * r_width_, r_height_), 0, 0,
         cv::INTER_LINEAR, gpu_stream);
@@ -155,8 +155,8 @@ void TegraStereoProc::processStereo(GPU::GpuMat &gpu_left_raw,
   // wait for left and right image
   // gpu_stream.waitForCompletion();
 
-  ROS_INFO(" stereo matching");
-  ROS_INFO(" stereoBM in");
+  NODELET_INFO(" stereo matching");
+  NODELET_INFO(" stereoBM in");
 
 #if OPENCV3
   if (use_stretch_) {
@@ -203,7 +203,7 @@ void TegraStereoProc::processStereo(GPU::GpuMat &gpu_left_raw,
   gpu_stream.enqueueDownload(gpu_disp_, disparity_);
 #endif
 
-  ROS_INFO("  stereoBM out");
+  NODELET_INFO("  stereoBM out");
 
   // static const int DPP = 16; // disparities per pixel
   // ^ means cv::StereoBM has 4 fractional bits,
@@ -250,9 +250,9 @@ void TegraStereoProc::processStereo(GPU::GpuMat &gpu_left_raw,
   disp_msg->delta_d = inv_dpp;
 
   // wait for gpu process completion
-  ROS_INFO(" GPU sync");
+  NODELET_INFO(" GPU sync");
   gpu_stream.waitForCompletion();
-  ROS_INFO(" GPU process end");
+  NODELET_INFO(" GPU process end");
 
   // We convert from fixed-point to float disparity and also adjust for any
   // x-offset between
@@ -275,13 +275,13 @@ void TegraStereoProc::processStereo(GPU::GpuMat &gpu_left_raw,
 
   ROS_ASSERT(dmat.data == &dimage.data[0]);
   /// @todo is_bigendian? :)
-  ROS_INFO(" disparity conversion end");
+  NODELET_INFO(" disparity conversion end");
 
   if (pub_disparity_.getNumSubscribers() > 0) {
     pub_disparity_.publish(disp_msg);
   }
 
-  ROS_INFO("end proc");
+  NODELET_INFO("end proc");
 }
 
 void TegraStereoProc::initRectificationMap(const sensor_msgs::CameraInfoConstPtr &msg,
