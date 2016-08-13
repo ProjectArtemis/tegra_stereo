@@ -28,9 +28,9 @@ void TegraStereoProc::onInit() {
 
   private_nh.param("queue_size", queue_size_, 100);
 
-  image_transport::ImageTransport it(nh);
-  m_left_sub.subscribe(it, "/stereo/cam0/image_raw", 1);
-  m_right_sub.subscribe(it, "/stereo/cam1/image_raw", 1);
+  m_it = boost::make_shared<image_transport::ImageTransport>(nh);
+  m_left_sub.subscribe(m_it, "/stereo/cam0/image_raw", 1);
+  m_right_sub.subscribe(m_it, "/stereo/cam1/image_raw", 1);
   m_left_info_sub.subscribe(nh, "/stereo/cam0/camera_info", 1);
   m_right_info_sub.subscribe(nh, "/stereo/cam1/camera_info", 1);
 
@@ -82,6 +82,8 @@ void TegraStereoProc::imageCallback(
 
   ROS_INFO("image callback");
   if (!calibration_initialized) {
+    ROS_INFO("calib init");
+
     initRectificationMap(l_info_msg, left_map1_, left_map2_);
     gpu_left_map1_.upload(left_map1_);
     gpu_left_map2_.upload(left_map2_);
