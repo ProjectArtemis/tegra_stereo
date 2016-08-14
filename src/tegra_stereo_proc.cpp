@@ -84,7 +84,7 @@ void TegraStereoProc::imageCallback(
 
   NODELET_INFO("image callback");
 
-  std::call_once(calibration_initialized_flag, [this, &] () {
+  std::call_once(calibration_initialized_flag, [&, this] () {
     NODELET_INFO("calib init");
 
     initRectificationMap(l_info_msg, left_map1_, left_map2_);
@@ -102,7 +102,6 @@ void TegraStereoProc::imageCallback(
     r_width_ = r_info_msg->width;
     r_height_ = r_info_msg->height;
 
-    calibration_initialized = true;
     NODELET_INFO("stereo calibration initialized");
   });
 
