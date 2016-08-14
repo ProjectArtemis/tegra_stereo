@@ -29,8 +29,8 @@ void TegraStereoProc::onInit() {
   private_nh.param("queue_size", queue_size_, 100);
 
   m_it = boost::make_shared<image_transport::ImageTransport>(nh);
-  m_left_sub.subscribe(m_it, "/stereo/cam0/image_raw", 1);
-  m_right_sub.subscribe(m_it, "/stereo/cam1/image_raw", 1);
+  m_left_sub.subscribe(*m_it.get(), "/stereo/cam0/image_raw", 1);
+  m_right_sub.subscribe(*m_it.get(), "/stereo/cam1/image_raw", 1);
   m_left_info_sub.subscribe(nh, "/stereo/cam0/camera_info", 1);
   m_right_info_sub.subscribe(nh, "/stereo/cam1/camera_info", 1);
 
