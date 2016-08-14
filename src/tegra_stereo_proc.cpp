@@ -236,7 +236,7 @@ void TegraStereoProc::processStereo(GPU::GpuMat &gpu_left_raw,
   dimage.step = dimage.width * sizeof(float);
   dimage.data.resize(dimage.step * dimage.height);
 
-  cv::Mat_<float> dmat(dimage.height, dimage.width, static_cast<float*>(dimage.data.data()),
+  cv::Mat_<float> dmat(dimage.height, dimage.width, static_cast<float*>(static_cast<void*>(dimage.data.data())),
       dimage.step);
 
   // Stereo parameters
