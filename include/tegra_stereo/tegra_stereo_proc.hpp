@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <atomic>
 
 #include <ros/ros.h>
 #include <ros/package.h>
@@ -56,7 +57,7 @@ public:
       const sensor_msgs::CameraInfoConstPtr& r_info_msg);
 
 private:
-  bool calibration_initialized;
+  std::once_flag calibration_initialized_flag;
 
   boost::shared_ptr<image_transport::ImageTransport> m_it;
 

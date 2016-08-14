@@ -83,7 +83,8 @@ void TegraStereoProc::imageCallback(
     const sensor_msgs::CameraInfoConstPtr &r_info_msg) {
 
   NODELET_INFO("image callback");
-  if (!calibration_initialized) {
+
+  std::call_once(calibration_initialized_flag, [this, &] () {
     NODELET_INFO("calib init");
 
     initRectificationMap(l_info_msg, left_map1_, left_map2_);
@@ -103,7 +104,7 @@ void TegraStereoProc::imageCallback(
 
     calibration_initialized = true;
     NODELET_INFO("stereo calibration initialized");
-  }
+  });
 
   // TODO perf this
   gpu_raw_left_.upload(cv_bridge::toCvShare(l_image_msg, sensor_msgs::image_encodings::BGR8)->image);
