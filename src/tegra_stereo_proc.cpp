@@ -7,27 +7,14 @@ TegraStereoProc::~TegraStereoProc() {}
 
 void TegraStereoProc::onInit() {
 
-  NODELET_WARN("Init nodelet");
   ros::NodeHandle &nh = getNodeHandle();
   ros::NodeHandle &private_nh = getPrivateNodeHandle();
 
-  private_nh.param("ndisparity", ndisp_, 96);
-  private_nh.param("win_size", win_size_, 15);
-  private_nh.param("filter_radius", filter_radius_, 3);
-  private_nh.param("filter_iter", filter_iter_, 1);
-
-  private_nh.param("stretch_factor", stretch_factor_, 2);
-
-  private_nh.param("use_csbp", use_csbp_, true);
-  private_nh.param("use_bilateral_filter", use_bilateral_filter_, true);
-  private_nh.param("use_stretch", use_stretch_, false);
-
-  if (!use_stretch_) {
-    stretch_factor_ = 1;
-  }
+  //private_nh.param("ndisparity", ndisp_, 96);
+  private_nh.param("P1", p1_, 1000);
+  private_nh.param("P2", p2_, 2000);
 
   private_nh.param("queue_size", queue_size_, 100);
-
   m_it = boost::make_shared<image_transport::ImageTransport>(nh);
   m_left_sub.subscribe(*m_it.get(), "/stereo/cam0/image_raw", 1);
   m_right_sub.subscribe(*m_it.get(), "/stereo/cam1/image_raw", 1);
@@ -36,7 +23,7 @@ void TegraStereoProc::onInit() {
 
   // GPU information
   ROS_ASSERT(GPU::getCudaEnabledDeviceCount() > 0);
-  GPU::DeviceInfo info(GPU::getDevice());
+  GPU::DeviceInfo info(GPU::getDevice()); // TODO : print this
 
   // Synchronize input topics.
   m_exact_sync = boost::make_shared<ExactSync>(ExactPolicy(queue_size_), m_left_sub,
@@ -47,33 +34,10 @@ void TegraStereoProc::onInit() {
 
   disparity_.create(cv::Size(l_width_, l_height_), CV_32FC1);
 
-#if OPENCV3
-  block_matcher_ = cv::cuda::createStereoBM(ndisp_ * stretch_factor_,
-      win_size_);
-  csbp_matcher_ =
-    cv::cuda::createStereoConstantSpaceBP(ndisp_ * stretch_factor_,
-        8, 4, 4, CV_16SC1);
-  //block_matcher_->setPrefilterType(cv::StereoBM::PREFILTER_XSOBEL);
-  //block_matcher_->setPrefilterCap(31);
-  //block_matcher_->setTextureTheshold(10);
-  bilateral_filter_ =
-    cv::cuda::createDisparityBilateralFilter(ndisp_ * stretch_factor_,
-        filter_radius_, filter_iter_);
-#else
-  block_matcher_.preset = cv::gpu::StereoBM_GPU::PREFILTER_XSOBEL;
-  block_matcher_.ndisp = ndisp_;
-  block_matcher_.winSize = win_size_;
-  block_matcher_.avergeTexThreshold = 10.0;
-#endif
-
-  //ros::SubscriberStatusCallback connect_cb =
-  //    boost::bind(&TegraStereoProc::connectCallback, this);
-  //image_transport::SubscriberStatusCallback connect_cb_image =
-  //    boost::bind(&TegraStereoProc::connectCallback, this);
-
   pub_disparity_ = nh.advertise<DisparityImage>("/stereo/disparity", 1);  // TODO add pointcloud2
+  
+  init_disparity_method(p1_, p2_);
 
-  NODELET_INFO("onInit done.");
 }
 
 void TegraStereoProc::imageCallback(
@@ -82,11 +46,7 @@ void TegraStereoProc::imageCallback(
     const sensor_msgs::CameraInfoConstPtr &l_info_msg,
     const sensor_msgs::CameraInfoConstPtr &r_info_msg) {
 
-  NODELET_INFO("image callback");
-
   std::call_once(calibration_initialized_flag, [&, this] () {
-    NODELET_INFO("calib init");
-
     initRectificationMap(l_info_msg, left_map1_, left_map2_);
     gpu_left_map1_.upload(left_map1_);
     gpu_left_map2_.upload(left_map2_);
@@ -102,111 +62,42 @@ void TegraStereoProc::imageCallback(
     r_width_ = r_info_msg->width;
     r_height_ = r_info_msg->height;
 
-    NODELET_INFO("stereo calibration initialized");
+    NODELET_INFO("Stereo calibration initialized");
   });
 
   // TODO perf this
-  gpu_raw_left_.upload(cv_bridge::toCvShare(l_image_msg, sensor_msgs::image_encodings::BGR8)->image);
-  gpu_raw_right_.upload(cv_bridge::toCvShare(r_image_msg, sensor_msgs::image_encodings::BGR8)->image);
+  gpu_raw_left_.upload(cv_bridge::toCvShare(l_image_msg, sensor_msgs::image_encodings::MONO8)->image);
+  gpu_raw_right_.upload(cv_bridge::toCvShare(r_image_msg, sensor_msgs::image_encodings::MONO8)->image);
 
   processStereo(gpu_raw_left_, gpu_raw_right_, l_info_msg->header);
 
-  NODELET_INFO("end callback");
 }
 
 void TegraStereoProc::processStereo(GPU::GpuMat &gpu_left_raw,
     GPU::GpuMat &gpu_right_raw,
     const std_msgs::Header &header) {
-  NODELET_INFO("start proc");
+    
   GPU::Stream gpu_stream;
-
-  // TODO potentially use this to block out unmatchable portions
-  //  // crop left and right images
-  //  NODELET_INFO("  crop left");
-  //  GPU::GpuMat gpu_left_raw(
-  //      gpu_input,
-  //      cv::Rect(l_x_offset_, l_y_offset_, l_width_, l_height_));
-
-  //  NODELET_INFO("  crop right");
-  //  GPU::GpuMat gpu_right_raw(
-  //      gpu_input,
-  //      cv::Rect(r_x_offset_, r_y_offset_, r_width_, r_height_));
-
+  
   // rectify
-  NODELET_INFO("  rectify left");
   rectifyMono(gpu_left_raw, gpu_left_rect_, gpu_left_map1_, gpu_left_map2_,
       gpu_stream);
 
-  NODELET_INFO("  rectify right");
   rectifyMono(gpu_right_raw, gpu_right_rect_, gpu_right_map1_, gpu_right_map2_,
       gpu_stream);
-
-  // stretch
-  if (use_stretch_) {
-    NODELET_INFO("  stretch left");
-    GPU::resize(gpu_left_rect_, gpu_left_stretch_,
-        cv::Size(stretch_factor_ * l_width_, l_height_), 0, 0,
-        cv::INTER_LINEAR, gpu_stream);
-
-    NODELET_INFO("  stretch right");
-    GPU::resize(gpu_right_rect_, gpu_right_stretch_,
-        cv::Size(stretch_factor_ * r_width_, r_height_), 0, 0,
-        cv::INTER_LINEAR, gpu_stream);
-  }
-
-  // wait for left and right image
-  // gpu_stream.waitForCompletion();
-
-  NODELET_INFO(" stereo matching");
-  NODELET_INFO(" stereoBM in");
-
-#if OPENCV3
-  if (use_stretch_) {
-    if (use_csbp_) {
-      csbp_matcher_->compute(gpu_left_stretch_, gpu_right_stretch_,
-          gpu_disp_stretch_, gpu_stream);
-    } else {
-      block_matcher_->compute(gpu_left_stretch_, gpu_right_stretch_,
-          gpu_disp_stretch_, gpu_stream);
-    }
-    if (use_bilateral_filter_) {
-      bilateral_filter_->apply(gpu_disp_stretch_, gpu_left_stretch_,
-          gpu_disp_filtered_, gpu_stream);
-      GPU::resize(gpu_disp_filtered_, gpu_disp_,
-          cv::Size(l_width_, l_height_), 0, 0, cv::INTER_LINEAR,
-          gpu_stream);
-      gpu_disp_filtered_.download(disparity_, gpu_stream);
-    } else {
-      GPU::resize(gpu_disp_stretch_, gpu_disp_,
-          cv::Size(l_width_, l_height_), 0, 0, cv::INTER_LINEAR,
-          gpu_stream);
-      gpu_disp_.download(disparity_, gpu_stream);
-    }
-  } else {
-    if (use_csbp_) {
-      csbp_matcher_->compute(gpu_left_rect_, gpu_right_rect_, gpu_disp_,
-          gpu_stream);
-    } else {
-      block_matcher_->compute(gpu_left_rect_, gpu_right_rect_, gpu_disp_,
-          gpu_stream);
-    }
-    if (use_bilateral_filter_) {
-      bilateral_filter_->apply(gpu_disp_, gpu_left_rect_, gpu_disp_filtered_,
-          gpu_stream);
-      gpu_disp_filtered_.download(disparity_, gpu_stream);
-    } else {
-      gpu_disp_.download(disparity_, gpu_stream);
-    }
-  }
-
-#else
-  // TODO add filters, etc.
-  block_matcher_(gpu_left_rect_, gpu_right_rect_, gpu_disp_, gpu_stream);
-  gpu_stream.enqueueDownload(gpu_disp_, disparity_);
-#endif
-
-  NODELET_INFO("  stereoBM out");
-
+      
+  // TODO publish these, use shared memory if it's faster
+  // TODO use streams 
+  cv::Mat left_rect;
+  gpu_left_rect_.download(left_rect);
+  cv::Mat right_rect;
+  gpu_right_rect_.download(right_rect);
+  
+  // Compute
+  float elapsed_time_ms;
+  disparity_ = compute_disparity_method(left_rect, right_rect, &elapsed_time_ms);
+  
+  /*
   // static const int DPP = 16; // disparities per pixel
   // ^ means cv::StereoBM has 4 fractional bits,
   // so disparity = value / (2 ^ 4) = value / 16
@@ -252,10 +143,11 @@ void TegraStereoProc::processStereo(GPU::GpuMat &gpu_left_raw,
   disp_msg->max_disparity = disp_msg->min_disparity + ndisp_ - 1;
   disp_msg->delta_d = inv_dpp;
 
+#if OPENCV3
   // wait for gpu process completion
   NODELET_INFO(" GPU sync");
   gpu_stream.waitForCompletion();
-  NODELET_INFO(" GPU process end");
+#endif
 
   // We convert from fixed-point to float disparity and also adjust for any
   // x-offset between
@@ -278,22 +170,16 @@ void TegraStereoProc::processStereo(GPU::GpuMat &gpu_left_raw,
 
   ROS_ASSERT(dmat.data == &dimage.data[0]);
   /// @todo is_bigendian? :)
-  NODELET_INFO(" disparity conversion end");
 
   if (pub_disparity_.getNumSubscribers() > 0) {
     pub_disparity_.publish(disp_msg);
   }
-
-  NODELET_INFO("end proc");
+ */
 }
 
 void TegraStereoProc::initRectificationMap(const sensor_msgs::CameraInfoConstPtr &msg,
     cv::Mat &map1, cv::Mat &map2) {
-  //cv::Mat_<double> cv_D(1, msg->D.size());
-  //for (size_t i = 0; i < msg->D.size(); i++) {
-  //  cv_D(i) = msg->D[i];
-  //}
-  // http://docs.opencv.org/2.4/modules/core/doc/basic_structures.html#mat
+
   cv::Mat cv_D(msg->D, true);
 
   cv::Matx33d cv_K(msg->K.data());

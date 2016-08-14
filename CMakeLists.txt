@@ -9,9 +9,6 @@ find_package(catkin REQUIRED
 find_package(Boost REQUIRED COMPONENTS thread)
 
 find_package(OpenCV REQUIRED)
-if (OpenCV_VERSION VERSION_GREATER "3.0.0")
-  add_definitions("-DOPENCV3=1")
-endif()
 
 find_package(PkgConfig)
 pkg_check_modules(YAML_CPP yaml-cpp)
@@ -28,6 +25,8 @@ else ()
   message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
 endif ()
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -march=armv8-a")
+
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES tegra_stereo
@@ -41,5 +40,20 @@ catkin_package(
 include_directories(include ${catkin_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS} ${YAML_CPP_INCLUDE_DIRS})
 link_directories(${YAML_CPP_LIBRARY_DIRS})
 
+find_package(CUDA REQUIRED)
+
+set(CUDA_PROPAGATE_HOST_FLAGS OFF)
+set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -std=c++11 -w -O3 -gencode arch=compute_53,code=sm_53 -lineinfo")
+
+set(LIBSGM 
+	src/median_filter.cu  
+	src/hamming_cost.cu 
+	src/disparity_method.cu
+	src/debug.cu 
+	src/costs.cu
+)
+cuda_add_library(libsgm ${LIBSGM} STATIC)
+
 add_library(tegra_stereo_proc src/tegra_stereo_proc.cpp)
-target_link_libraries(tegra_stereo_proc ${catkin_LIBRARIES} ${OpenCV_LIBRARIES} ${YAML_CPP_LIBRARIES})
+target_link_libraries(tegra_stereo_proc ${CUDA_LIBRARIES} ${catkin_LIBRARIES} ${OpenCV_LIBRARIES} ${YAML_CPP_LIBRARIES})
+

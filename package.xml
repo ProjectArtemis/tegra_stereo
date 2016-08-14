@@ -14,7 +14,6 @@
   <build_depend>dynamic_reconfigure</build_depend>
   <build_depend>image_geometry</build_depend>
   <build_depend>image_proc</build_depend>
-  <build_depend>stereo_image_proc</build_depend>
   <build_depend>image_transport</build_depend>
   <build_depend>libopencv-dev</build_depend>
   <build_depend>message_filters</build_depend>
@@ -30,7 +29,6 @@
   <run_depend>dynamic_reconfigure</run_depend>
   <run_depend>image_geometry</run_depend>
   <run_depend>image_proc</run_depend>
-  <run_depend>stereo_image_proc</run_depend>
   <run_depend>image_transport</run_depend>
   <run_depend>libopencv-dev</run_depend>
   <run_depend>message_filters</run_depend>
