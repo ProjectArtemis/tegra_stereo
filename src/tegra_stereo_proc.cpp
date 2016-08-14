@@ -72,6 +72,8 @@ void TegraStereoProc::onInit() {
   //    boost::bind(&TegraStereoProc::connectCallback, this);
 
   pub_disparity_ = nh.advertise<DisparityImage>("/stereo/disparity", 1);  // TODO add pointcloud2
+
+  NODELET_INFO("onInit done.");
 }
 
 void TegraStereoProc::imageCallback(
