@@ -20,6 +20,7 @@ if(${YAML_CPP_VERSION} VERSION_GREATER 0.5)
 endif()
 
 # C++11 is required
+include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-std=c++11" COMPILER_SUPPORTS_STD_CXX11)
 if (COMPILER_SUPPORTS_STD_CXX11)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
