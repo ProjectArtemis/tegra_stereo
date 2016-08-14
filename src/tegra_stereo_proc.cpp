@@ -213,9 +213,8 @@ void TegraStereoProc::processStereo(GPU::GpuMat &gpu_left_raw,
   double inv_dpp = 1.0 / DPP;
 
   // Allocate new disparity image message
-  DisparityImagePtr disp_msg = boost::make_shared<DisparityImage>();
-  disp_msg->header = header;
-  disp_msg->image.header = header;
+  auto disp_msg = boost::make_shared<DisparityImage>();
+  disp_msg->header = disp_msg->image.header = header;
 
   // Compute window of (potentially) valid disparities
   int border = win_size_ / 2;
@@ -224,18 +223,20 @@ void TegraStereoProc::processStereo(GPU::GpuMat &gpu_left_raw,
   int right = l_width_ - 1 - wtf;
   int top = border;
   int bottom = l_height_ - 1 - border;
+
   disp_msg->valid_window.x_offset = left;
   disp_msg->valid_window.y_offset = top;
   disp_msg->valid_window.width = right - left;
   disp_msg->valid_window.height = bottom - top;
 
-  sensor_msgs::Image &dimage = disp_msg->image;
+  auto &dimage = disp_msg->image;
   dimage.height = l_height_;
   dimage.width = l_width_;
   dimage.encoding = sensor_msgs::image_encodings::TYPE_32FC1;
   dimage.step = dimage.width * sizeof(float);
   dimage.data.resize(dimage.step * dimage.height);
-  cv::Mat_<float> dmat(dimage.height, dimage.width, (float *)&dimage.data[0],
+
+  cv::Mat_<float> dmat(dimage.height, dimage.width, static_cast<float*>(dimage.data.data()),
       dimage.step);
 
   // Stereo parameters
