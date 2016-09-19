@@ -1,5 +1,13 @@
 #include "tegra_stereo/disparity_method.h"
 
+#include "tegra_stereo/util.h"
+#include "tegra_stereo/configuration.h"
+#include "tegra_stereo/costs.h"
+#include "tegra_stereo/hamming_cost.h"
+#include "tegra_stereo/median_filter.h"
+#include "tegra_stereo/cost_aggregation.h"
+#include "tegra_stereo/debug.h"
+
 static cudaStream_t stream1, stream2, stream3;
 static uint8_t *d_im0;
 static uint8_t *d_im1;

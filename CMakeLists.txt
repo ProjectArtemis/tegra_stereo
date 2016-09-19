@@ -44,7 +44,7 @@ find_package(CUDA REQUIRED)
 
 set(CUDA_PROPAGATE_HOST_FLAGS OFF)
 set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -std=c++11 -w -O3 -gencode arch=compute_53,code=sm_53 -lineinfo")
-
+set(CUDA_ARCH "-arch=sm_53")
 set(LIBSGM 
 	src/median_filter.cu  
 	src/hamming_cost.cu 
@@ -52,8 +52,7 @@ set(LIBSGM
 	src/debug.cu 
 	src/costs.cu
 )
-cuda_add_library(libsgm ${LIBSGM} STATIC)
 
-add_library(tegra_stereo_proc src/tegra_stereo_proc.cpp)
+cuda_add_library(tegra_stereo_proc src/tegra_stereo_proc.cpp ${LIBSGM})
 target_link_libraries(tegra_stereo_proc ${CUDA_LIBRARIES} ${catkin_LIBRARIES} ${OpenCV_LIBRARIES} ${YAML_CPP_LIBRARIES})
 
